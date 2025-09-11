@@ -11,6 +11,8 @@ const CATEGORY_LABEL: Record<string, string> = {
   crop: "Crop Tee",
 };
 
+type FeatureCode = "organic" | "usa_made" | "triblend";
+
 export default function App() {
   const [rows, setRows] = useState<BaseProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +20,7 @@ export default function App() {
 
   const [category, setCategory] = useState<string | null>(null);
   const [selectedBase, setSelectedBase] = useState<string | null>(null);
+  const [features, setFeatures] = useState<Set<FeatureCode>>(new Set());
 
   // Load CSV once
   useEffect(() => {
@@ -53,12 +56,35 @@ export default function App() {
     if (!category) return;
     const first = rows.find((r) => r.category === category);
     if (first) setSelectedBase(first.code);
+    // clear feature toggles when switching type (optional but less confusing)
+    setFeatures(new Set());
   }, [category, rows]);
 
   const base = useMemo(
     () => rows.find((r) => r.code === selectedBase) || null,
     [rows, selectedBase]
   );
+
+  // Feature availability (drives chip disabled state)
+  const canOrganic = basesForCategory.some((b) => b.organic);
+  const canUSAMade = basesForCategory.some((b) => b.usa_made);
+  const canTriblend =
+    (category === "short_tee" || category === "tank") &&
+    basesForCategory.some(
+      (b) =>
+        /triblend/i.test(b.label) ||
+        /tri[- ]?blend/i.test(b.fit_notes ?? "") ||
+        b.tier === ("alt_mid_triblend" as any)
+    ); // currently none in your CSV → disabled until you add one
+
+  function toggleFeature(code: FeatureCode, enabled: boolean) {
+    setFeatures((prev) => {
+      const next = new Set(prev);
+      if (enabled) next.add(code);
+      else next.delete(code);
+      return next;
+    });
+  }
 
   if (loading) return <p style={{ padding: 16 }}>Loading…</p>;
   if (error) return <p style={{ padding: 16, color: "#b00" }}>Error: {error}</p>;
@@ -74,10 +100,10 @@ export default function App() {
       }}
     >
       <h1 style={{ margin: 0, fontSize: 28 }}>
-        ArtsyFartsy — Product Uniformity (Step 5)
+        ArtsyFartsy — Product Uniformity (Step 6)
       </h1>
       <p style={{ marginTop: 8, color: "#555" }}>
-        Pick a garment type, choose a base, then copy the formatted description.
+        Pick a garment type, choose a base, toggle special features, then copy.
       </p>
 
       {/* Type of garment chips */}
@@ -103,6 +129,33 @@ export default function App() {
           );
         })}
       </div>
+
+      {/* Special feature chips */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+        <Chip
+          label="Organic"
+          active={features.has("organic")}
+          disabled={!canOrganic}
+          onClick={() => canOrganic && toggleFeature("organic", !features.has("organic"))}
+        />
+        <Chip
+          label="Made in USA"
+          active={features.has("usa_made")}
+          disabled={!canUSAMade}
+          onClick={() => canUSAMade && toggleFeature("usa_made", !features.has("usa_made"))}
+        />
+        <Chip
+          label="Triblend"
+          active={features.has("triblend")}
+          disabled={!canTriblend}
+          onClick={() => canTriblend && toggleFeature("triblend", !features.has("triblend"))}
+        />
+      </div>
+      {!canUSAMade && (
+        <p style={{ marginTop: 4, color: "#888", fontSize: 12 }}>
+          “Made in USA” will auto-enable when a USA base exists for this type.
+        </p>
+      )}
 
       {/* Base options for selected type */}
       <div style={{ marginTop: 20 }}>
@@ -147,7 +200,7 @@ export default function App() {
             lineHeight: 1.4,
           }}
         >
-          {base ? buildCopyBlock(base) : "Select a base above to preview."}
+          {base ? buildCopyBlock(base, features) : "Select a base above to preview."}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <button
@@ -158,7 +211,7 @@ export default function App() {
             Copy description
           </button>
           <button
-            onClick={() => base && copyToClipboard(buildCopyBlock(base))}
+            onClick={() => base && copyToClipboard(buildCopyBlock(base, features))}
             style={secondaryBtn}
             disabled={!base}
           >
@@ -171,6 +224,35 @@ export default function App() {
 }
 
 /* ---------- helpers ---------- */
+
+function Chip({
+  label,
+  active,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        padding: "8px 12px",
+        borderRadius: 999,
+        border: active ? "1px solid #111" : "1px solid #ddd",
+        background: disabled ? "#f3f3f3" : active ? "#111" : "#fff",
+        color: disabled ? "#999" : active ? "#fff" : "#111",
+        cursor: disabled ? "not-allowed" : "pointer",
+      }}
+    >
+      {label}
+    </button>
+  );
+}
 
 function copyToClipboard(text: string) {
   if (!text) return;
@@ -189,23 +271,22 @@ function legacyCopy(text: string) {
   document.body.removeChild(ta);
 }
 
-function buildCopyBlock(b: BaseProduct): string {
+function buildCopyBlock(b: BaseProduct, features: Set<FeatureCode>): string {
+  // Combine base's inherent flags with user-selected features
+  const tags = new Set<string>([b.tier]);
+  if (b.organic || features.has("organic")) tags.add("organic");
+  if (b.usa_made || features.has("usa_made")) tags.add("usa_made");
+  if (features.has("triblend")) tags.add("triblend");
+
   const header =
     `Base Product Name: ${b.label}\n` +
     `Base Product Code: ${b.code}\n` +
     `Retail Price: $${b.retail_price.toFixed(2)}\n` +
-    `Tags used: ${[
-      b.tier,
-      b.organic ? "organic" : null,
-      b.usa_made ? "usa_made" : null,
-    ]
-      .filter(Boolean)
-      .join(", ")}`;
+    `Tags used: ${Array.from(tags).join(", ")}`;
 
   return `${header}\n\n${buildDescription(b)}`;
 }
 
-// Small, safe description. We can swap in richer per-base text later.
 function buildDescription(b: BaseProduct): string {
   if (b.code === "AS4062") {
     return (
@@ -216,7 +297,6 @@ function buildDescription(b: BaseProduct): string {
       "- Preshrunk to minimize shrinkage"
     );
   }
-  // Generic fallback using your CSV fields
   return `- ${b.fit_notes || "Comfortable everyday fit"}\n- Brand: ${b.brand} ${b.model_name}`;
 }
 
