@@ -1,16 +1,5 @@
 import React from "react";
-import { loadBaseProducts } from "./loadBaseProducts";
-
-type BaseProduct = {
-  code: string;
-  label: string;
-  retail_price: number;
-  category: string;
-  tier: string;
-  organic: boolean;
-  usa_made: boolean;
-  active: boolean;
-};
+import { loadBaseProducts, type BaseProduct } from "./loadBaseProducts";
 
 export default function BaseProductsDebug(): JSX.Element {
   const [rows, setRows] = React.useState<BaseProduct[]>([]);
@@ -21,7 +10,7 @@ export default function BaseProductsDebug(): JSX.Element {
     (async () => {
       try {
         const data = await loadBaseProducts();
-        setRows(data as BaseProduct[]);
+        setRows(data);
       } catch (e: any) {
         setError(e?.message ?? String(e));
       } finally {
