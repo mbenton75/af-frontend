@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600">
+  <rect width="100%" height="100%" fill="#f2f2f2"/>
+  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
+        font-family="system-ui, Arial, sans-serif" font-size="28" fill="#666">
+    No image
+  </text>
+</svg>
