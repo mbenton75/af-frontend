@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { loadBaseProducts, type BaseProduct } from "./loadBaseProducts";
+import { loadProducts, type Product } from "./loadProducts";
 
 // Human labels for the category codes in your CSV
 const CATEGORY_LABEL: Record<string, string> = {
@@ -14,7 +15,8 @@ const CATEGORY_LABEL: Record<string, string> = {
 type FeatureCode = "organic" | "usa_made" | "triblend";
 
 export default function App() {
-  const [rows, setRows] = useState<BaseProduct[]>([]);
+  const [bases, setBases] = useState<BaseProduct[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,14 +24,15 @@ export default function App() {
   const [selectedBase, setSelectedBase] = useState<string | null>(null);
   const [features, setFeatures] = useState<Set<FeatureCode>>(new Set());
 
-  // Load CSV once
+  // Load CSVs once
   useEffect(() => {
     (async () => {
       try {
-        const data = await loadBaseProducts();
-        const active = data.filter((r) => r.active);
-        setRows(active);
-        setCategory(active[0]?.category ?? null);
+        const [bp, pr] = await Promise.all([loadBaseProducts(), loadProducts()]);
+        const activeBases = bp.filter((r) => r.active);
+        setBases(activeBases);
+        setProducts(pr.filter((p) => p.enabled));
+        setCategory(activeBases[0]?.category ?? null);
       } catch (e: any) {
         setError(e?.message ?? String(e));
       } finally {
@@ -38,31 +41,30 @@ export default function App() {
     })();
   }, []);
 
-  // All categories present in CSV (for the chips)
+  // Category chips
   const categories = useMemo(() => {
     const set = new Set<string>();
-    rows.forEach((r) => set.add(r.category));
+    bases.forEach((r) => set.add(r.category));
     return Array.from(set);
-  }, [rows]);
+  }, [bases]);
 
-  // Bases for the currently selected category
+  // Bases for selected category
   const basesForCategory = useMemo(
-    () => rows.filter((r) => r.category === category),
-    [rows, category]
+    () => bases.filter((r) => r.category === category),
+    [bases, category]
   );
 
   // Keep a valid base selected when category changes
   useEffect(() => {
     if (!category) return;
-    const first = rows.find((r) => r.category === category);
+    const first = bases.find((r) => r.category === category);
     if (first) setSelectedBase(first.code);
-    // clear feature toggles when switching type (optional but less confusing)
-    setFeatures(new Set());
-  }, [category, rows]);
+    setFeatures(new Set()); // reset feature toggles when switching type
+  }, [category, bases]);
 
   const base = useMemo(
-    () => rows.find((r) => r.code === selectedBase) || null,
-    [rows, selectedBase]
+    () => bases.find((r) => r.code === selectedBase) || null,
+    [bases, selectedBase]
   );
 
   // Feature availability (drives chip disabled state)
@@ -75,7 +77,7 @@ export default function App() {
         /triblend/i.test(b.label) ||
         /tri[- ]?blend/i.test(b.fit_notes ?? "") ||
         b.tier === ("alt_mid_triblend" as any)
-    ); // currently none in your CSV → disabled until you add one
+    ); // none yet → disabled until you add one
 
   function toggleFeature(code: FeatureCode, enabled: boolean) {
     setFeatures((prev) => {
@@ -86,6 +88,13 @@ export default function App() {
     });
   }
 
+  // Products filtered by selected base
+  const productsForBase = useMemo(
+    () =>
+      products.filter((p) => p.base_code === selectedBase && p.enabled),
+    [products, selectedBase]
+  );
+
   if (loading) return <p style={{ padding: 16 }}>Loading…</p>;
   if (error) return <p style={{ padding: 16, color: "#b00" }}>Error: {error}</p>;
   if (!category) return <p style={{ padding: 16 }}>No active base products found.</p>;
@@ -95,12 +104,12 @@ export default function App() {
       style={{
         padding: 20,
         fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-        maxWidth: 960,
+        maxWidth: 1100,
         margin: "0 auto",
       }}
     >
       <h1 style={{ margin: 0, fontSize: 28 }}>
-        ArtsyFartsy — Product Uniformity (Step 6)
+        ArtsyFartsy — Product Uniformity (Step 9)
       </h1>
       <p style={{ marginTop: 8, color: "#555" }}>
         Pick a garment type, choose a base, toggle special features, then copy.
@@ -218,6 +227,52 @@ export default function App() {
             Copy all
           </button>
         </div>
+      </div>
+
+      {/* Image grid for current base */}
+      <div style={{ marginTop: 24 }}>
+        <h2 style={{ marginBottom: 8 }}>Current inventory (selected base)</h2>
+        {productsForBase.length === 0 ? (
+          <p style={{ color: "#777" }}>No products yet for this base.</p>
+        ) : (
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+              gap: 12,
+            }}
+          >
+            {productsForBase.map((p) => (
+              <figure
+                key={p.sku}
+                style={{
+                  margin: 0,
+                  border: "1px solid #e8e8e8",
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  background: "#fff",
+                }}
+              >
+                <img
+                  src={p.image_src}
+                  alt={p.title}
+                  loading="lazy"
+                  width={600}
+                  height={600}
+                  style={{ width: "100%", height: "auto", display: "block", aspectRatio: "1 / 1", objectFit: "cover" }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src =
+                      "https://via.placeholder.com/600x600.png?text=Image+not+available";
+                  }}
+                />
+                <figcaption style={{ padding: 8, fontSize: 12, color: "#333" }}>
+                  <div style={{ fontWeight: 600, marginBottom: 2 }}>{p.sku}</div>
+                  <div style={{ color: "#666" }}>{p.title}</div>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
