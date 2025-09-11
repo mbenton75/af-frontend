@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { loadBaseProducts, type BaseProduct } from "./loadBaseProducts";
 import { loadProducts, type Product } from "./loadProducts";
 
@@ -90,8 +90,7 @@ export default function App() {
 
   // Products filtered by selected base
   const productsForBase = useMemo(
-    () =>
-      products.filter((p) => p.base_code === selectedBase && p.enabled),
+    () => products.filter((p) => p.base_code === selectedBase && p.enabled),
     [products, selectedBase]
   );
 
@@ -108,9 +107,7 @@ export default function App() {
         margin: "0 auto",
       }}
     >
-      <h1 style={{ margin: 0, fontSize: 28 }}>
-        ArtsyFartsy — Product Uniformity (Step 9)
-      </h1>
+      <h1 style={{ margin: 0, fontSize: 28 }}>ArtsyFartsy — Product Uniformity</h1>
       <p style={{ marginTop: 8, color: "#555" }}>
         Pick a garment type, choose a base, toggle special features, then copy.
       </p>
@@ -259,9 +256,15 @@ export default function App() {
                   loading="lazy"
                   width={600}
                   height={600}
-                  style={{ width: "100%", height: "auto", display: "block", aspectRatio: "1 / 1", objectFit: "cover" }}
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/img/fallback.svg"; }}
-
+                  style={{
+                    width: "100%",
+                    height: "auto",
+                    display: "block",
+                    aspectRatio: "1 / 1",
+                    objectFit: "cover",
+                  }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = "/img/fallback.svg";
                   }}
                 />
                 <figcaption style={{ padding: 8, fontSize: 12, color: "#333" }}>
@@ -355,7 +358,7 @@ function buildDescription(b: BaseProduct): string {
 }
 
 /* button styles */
-const primaryBtn: React.CSSProperties = {
+const primaryBtn: CSSProperties = {
   padding: "8px 12px",
   borderRadius: 12,
   border: "1px solid #111",
@@ -363,7 +366,7 @@ const primaryBtn: React.CSSProperties = {
   color: "#fff",
   cursor: "pointer",
 };
-const secondaryBtn: React.CSSProperties = {
+const secondaryBtn: CSSProperties = {
   padding: "8px 12px",
   borderRadius: 12,
   border: "1px solid #ddd",
