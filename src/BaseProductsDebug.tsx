@@ -2,14 +2,20 @@ import React from "react";
 import { loadBaseProducts } from "./loadBaseProducts";
 
 type BaseProduct = {
-  code: string; label: string; retail_price: number;
-  category: string; tier: string; organic: boolean; usa_made: boolean; active: boolean;
+  code: string;
+  label: string;
+  retail_price: number;
+  category: string;
+  tier: string;
+  organic: boolean;
+  usa_made: boolean;
+  active: boolean;
 };
 
-export default function BaseProductsDebug() {
+export default function BaseProductsDebug(): JSX.Element {
   const [rows, setRows] = React.useState<BaseProduct[]>([]);
   const [error, setError] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(true);
+  const [loading, setLoading] = React.useState<boolean>(true);
 
   React.useEffect(() => {
     (async () => {
@@ -30,4 +36,17 @@ export default function BaseProductsDebug() {
   return (
     <div style={{ padding: 16, fontFamily: "system-ui" }}>
       <h2 style={{ margin: 0 }}>Base Products (debug)</h2>
-      <p style={{ marginTop: 4
+      <p style={{ marginTop: 4 }}>
+        Loaded: <strong>{rows.length}</strong>
+      </p>
+      <ul>
+        {rows.map((b) => (
+          <li key={b.code}>
+            {b.label}
+            {` — $${(b.retail_price ?? 0).toFixed(2)}`}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
