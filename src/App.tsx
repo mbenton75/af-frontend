@@ -24,6 +24,9 @@ export default function App() {
   const [selectedBase, setSelectedBase] = useState<string | null>(null);
   const [features, setFeatures] = useState<Set<FeatureCode>>(new Set());
 
+  // NEW: simple filter query for the grid
+  const [filterText, setFilterText] = useState("");
+
   // Load CSVs once
   useEffect(() => {
     (async () => {
@@ -60,6 +63,7 @@ export default function App() {
     const first = bases.find((r) => r.category === category);
     if (first) setSelectedBase(first.code);
     setFeatures(new Set()); // reset feature toggles when switching type
+    setFilterText(""); // also clear the grid filter
   }, [category, bases]);
 
   const base = useMemo(
@@ -93,6 +97,17 @@ export default function App() {
     () => products.filter((p) => p.base_code === selectedBase && p.enabled),
     [products, selectedBase]
   );
+
+  // NEW: text filter applied to the base’s products
+  const visibleProducts = useMemo(() => {
+    const q = filterText.trim().toLowerCase();
+    if (!q) return productsForBase;
+    return productsForBase.filter((p) =>
+      [p.sku, p.title, p.color, p.size]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q))
+    );
+  }, [productsForBase, filterText]);
 
   if (loading) return <p style={{ padding: 16 }}>Loading…</p>;
   if (error) return <p style={{ padding: 16, color: "#b00" }}>Error: {error}</p>;
@@ -226,11 +241,37 @@ export default function App() {
         </div>
       </div>
 
-      {/* Image grid for current base */}
+      {/* Image grid controls */}
       <div style={{ marginTop: 24 }}>
         <h2 style={{ marginBottom: 8 }}>Current inventory (selected base)</h2>
-        {productsForBase.length === 0 ? (
-          <p style={{ color: "#777" }}>No products yet for this base.</p>
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+          <input
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
+            placeholder="Filter by color, size, or SKU…"
+            style={{
+              padding: "8px 10px",
+              borderRadius: 10,
+              border: "1px solid #ddd",
+              width: 320,
+            }}
+          />
+          {filterText && (
+            <button
+              onClick={() => setFilterText("")}
+              style={{ ...secondaryBtn, padding: "6px 10px" }}
+            >
+              Clear
+            </button>
+          )}
+          <span style={{ color: "#666", fontSize: 12 }}>
+            {visibleProducts.length} matching
+          </span>
+        </div>
+
+        {visibleProducts.length === 0 ? (
+          <p style={{ color: "#777" }}>No products match your filter.</p>
         ) : (
           <div
             style={{
@@ -239,7 +280,7 @@ export default function App() {
               gap: 12,
             }}
           >
-            {productsForBase.map((p) => (
+            {visibleProducts.map((p) => (
               <figure
                 key={p.sku}
                 style={{
