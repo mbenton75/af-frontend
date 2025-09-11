@@ -1,7 +1,7 @@
 import React from "react";
 import { loadBaseProducts, type BaseProduct } from "./loadBaseProducts";
 
-export default function BaseProductsDebug(): JSX.Element {
+export default function BaseProductsDebug() {
   const [rows, setRows] = React.useState<BaseProduct[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState<boolean>(true);
