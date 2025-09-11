@@ -21,10 +21,9 @@ export default function App() {
     (async () => {
       try {
         const data = await loadBaseProducts();
-        setRows(data.filter((r) => r.active));
-        // default to the first category present in the CSV
-        const first = data.find((r) => r.active)?.category ?? null;
-        setCategory(first);
+        const active = data.filter((r) => r.active);
+        setRows(active);
+        setCategory(active[0]?.category ?? null);
       } catch (e: any) {
         setError(e?.message ?? String(e));
       } finally {
@@ -49,12 +48,58 @@ export default function App() {
   if (!category) return <p style={{ padding: 16 }}>No active base products found.</p>;
 
   return (
-    <div style={{ padding: 20, fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
-      <h1 style={{ margin: 0, fontSize: 28 }}>ArtsyFartsy — Product Uniformity (Step 4)</h1>
+    <div
+      style={{
+        padding: 20,
+        fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+      }}
+    >
+      <h1 style={{ margin: 0, fontSize: 28 }}>
+        ArtsyFartsy — Product Uniformity (Step 4)
+      </h1>
       <p style={{ marginTop: 8, color: "#555" }}>
         Pick a garment type, then see the available base options from your CSV.
       </p>
 
       {/* Type of garment chips */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-        {categories.m
+        {categories.map((c) => {
+          const active = c === category;
+          const label = CATEGORY_LABEL[c] ?? c;
+          return (
+            <button
+              key={c}
+              onClick={() => setCategory(c)}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 999,
+                border: active ? "1px solid #111" : "1px solid #ddd",
+                background: active ? "#111" : "#fff",
+                color: active ? "#fff" : "#111",
+                cursor: "pointer",
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Base options for selected type */}
+      <div style={{ marginTop: 20 }}>
+        <h2 style={{ marginBottom: 8 }}>
+          Base options for <em>{CATEGORY_LABEL[category] ?? category}</em>
+        </h2>
+        <ul>
+          {basesForCategory.map((b) => (
+            <li key={b.code}>
+              {b.label}
+              {` — $${b.retail_price.toFixed(2)}`}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
