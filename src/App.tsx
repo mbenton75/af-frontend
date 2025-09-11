@@ -260,9 +260,8 @@ export default function App() {
                   width={600}
                   height={600}
                   style={{ width: "100%", height: "auto", display: "block", aspectRatio: "1 / 1", objectFit: "cover" }}
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).src =
-                      "https://via.placeholder.com/600x600.png?text=Image+not+available";
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/img/fallback.svg"; }}
+
                   }}
                 />
                 <figcaption style={{ padding: 8, fontSize: 12, color: "#333" }}>
