@@ -1,0 +1,13 @@
+code,brand,model_name,label,category,tier,organic,usa_made,active,retail_price,fit_notes
+AS5001T,AS Colour,5001T,AS Colour 5001T,short_tee,premium_non_org,false,false,true,42.50,Premium midweight true to size
+SS_STTU169,Stanley/Stella,STTU169,Stanley/Stella STTU169 (Organic),short_tee,premium_org,true,false,true,42.50,Organic cotton regular fit
+BC3501,Bella + Canvas,3501,B+C 3501 LS,long_tee,mid,false,false,true,36.50,Light-mid LS modern fit
+AS5081,AS Colour,5081,AS Colour 5081 Heavy LS,long_tee,heavy_top,false,false,true,42.50,Heavyweight structured drape
+CC6014,Comfort Colors,6014,Comfort Colors 6014 Heavy LS,long_tee,heavy_top,false,false,true,42.50,Garment-dyed heavy relaxed fit
+BC3719,Bella + Canvas,3719,B+C 3719 Hoodie,hoodie,mid,false,false,true,54.50,Midweight fleece unisex
+BC4711,Bella + Canvas,4711,B+C 4711 Crew,crew,mid,false,false,true,49.50,Premium fleece crew modern fit
+SS_SASU004,Stanley/Stella,SASU004,Stanley/Stella SASU004 (Organic),crew,premium_org,true,false,true,59.50,Organic premium fleece regular fit
+BC3480,Bella + Canvas,3480,B+C 3480 Unisex Tank,tank,mid,false,false,true,34.50,Jersey tank classic fit
+BC8803,Bella + Canvas,8803,B+C 8803 Flowy Muscle Tank,tank,mid,false,false,true,34.50,Women’s flowy muscle tank
+BC1012,Bella + Canvas,1012,B+C 1012 Rib Women’s Tank,tank,mid,false,false,true,34.50,Rib knit body-hugging fit
+AS4062,AS Colour,4062,AS Colour 4062 Crop Tee,crop,premium_non_org,false,false,true,39.50,Relaxed cropped silhouette
