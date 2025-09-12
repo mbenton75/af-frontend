@@ -13,6 +13,14 @@ const CATEGORY_LABEL: Record<string, string> = {
   tank: "Tank",
   crop: "Crop Tee",
 };
+const TIER_LABEL: Record<string, string> = {
+  std: "Std",
+  mid: "Mid",
+  premium_non_org: "Premium",
+  premium_org: "Premium +",
+  heavy_top: "Mid",         // choose what you prefer for this one
+  alt_mid_triblend: "Mid",  // fallback label
+};
 
 type FeatureCode = "organic" | "usa_made" | "triblend";
 
@@ -411,7 +419,7 @@ function buildCopyBlock(
     `Base Product Name: ${b.label}\n` +
     `Base Product Code: ${b.code}\n` +
     `Retail Price: $${b.retail_price.toFixed(2)}\n` +
-    `Tier: ${b.tier}\n` +
+    `Tier: ${TIER_LABEL[b.tier] ?? b.tier}\n` +
     `Tags used: ${Array.from(tags).join(", ")}`;
 
   return `${header}\n\n${body}`;
