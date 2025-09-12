@@ -88,7 +88,7 @@ jobs:
               });
               if (!res.ok) {
                 const body = await res.text();
-                throw new Error(\`Shopify \${res.status}: \${body}\`);
+                throw new Error(`Shopify ${res.status}: ${body}`);
               }
               const data = await res.json();
               out.push(...(data.products || []));
@@ -149,11 +149,11 @@ jobs:
               if (!baseCode) continue; // no base -> skip
 
               for (const v of (p.variants || [])) {
-                const sku = (v.sku || \`\${p.handle}-\${v.id}\`).toString();
+                const sku = (v.sku || `${p.handle}-${v.id}`).toString();
                 const { color, size } = variantColorSize(p, v);
                 const img = variantImage(p, v);
                 const enabled = p.status === "active" ? "true" : "false";
-                const title = \`\${p.title} — \${v.title || [color, size].filter(Boolean).join(" ")}\`.trim();
+                const title = `${p.title} — ${v.title || [color, size].filter(Boolean).join(" ")}`.trim();
                 rows.push([sku, baseCode, title, color, size, img, enabled]);
               }
             }
@@ -161,7 +161,7 @@ jobs:
             const outDir = path.join(process.cwd(), "public", "data");
             fs.mkdirSync(outDir, { recursive: true });
             const csv = rows.map(r => r.map(s => String(s ?? "").replace(/"/g,'""'))
-                                     .map(s => /[",\n]/.test(s) ? \`"\${s}"\` : s).join(",")).join("\n");
+                                     .map(s => /[",\n]/.test(s) ? `"${s}"` : s).join(",")).join("\n");
             fs.writeFileSync(path.join(outDir, "products.csv"), csv, "utf8");
             fs.writeFileSync(path.join(outDir, "meta.json"), JSON.stringify({ last_updated: new Date().toISOString() }), "utf8");
             console.log("Wrote products.csv and meta.json");
