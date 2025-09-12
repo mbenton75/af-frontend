@@ -1,8 +1,10 @@
+import LastUpdated from "./LastUpdated";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { loadBaseProducts, type BaseProduct } from "./loadBaseProducts";
 import { loadProducts, type Product } from "./loadProducts";
+import { loadDescriptions } from "./loadDescriptions";
 
-/** Friendly labels for your categories */
+// Human labels for the category codes in your CSV
 const CATEGORY_LABEL: Record<string, string> = {
   short_tee: "Short Sleeve",
   long_tee: "Long Sleeve",
@@ -14,15 +16,13 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 type FeatureCode = "organic" | "usa_made" | "triblend";
 
-/** Best-effort fetch of /data/descriptions.json (safe if missing) */
-async function loadDescriptions(): Promise<Record<string, string>> {
-  try {
-    const res = await fetch("/data/descriptions.json", { cache: "no-store" });
-    if (!res.ok) return {};
-    return (await res.json()) as Record<string, string>;
-  } catch {
-    return {};
-  }
+// --- NEW: normalizes description spacing ---
+function tidy(text: string): string {
+  return text
+    .replace(/\r\n/g, "\n")     // normalize Windows line endings
+    .replace(/\n{3,}/g, "\n\n") // collapse 3+ newlines → just 2
+    .replace(/[ \t]+\n/g, "\n") // trim trailing spaces before newline
+    .trim();
 }
 
 export default function App() {
@@ -35,6 +35,8 @@ export default function App() {
   const [category, setCategory] = useState<string | null>(null);
   const [selectedBase, setSelectedBase] = useState<string | null>(null);
   const [features, setFeatures] = useState<Set<FeatureCode>>(new Set());
+
+  // simple filter query for the grid
   const [filterText, setFilterText] = useState("");
 
   // Load CSVs + descriptions once
@@ -95,7 +97,7 @@ export default function App() {
       (b) =>
         /triblend/i.test(b.label) ||
         /tri[- ]?blend/i.test(b.fit_notes ?? "") ||
-        (b as any).tier === "alt_mid_triblend"
+        (b.tier as any) === "alt_mid_triblend"
     );
 
   function toggleFeature(code: FeatureCode, enabled: boolean) {
@@ -113,7 +115,7 @@ export default function App() {
     [products, selectedBase]
   );
 
-  // Text filter on the grid
+  // text filter applied to the base’s products
   const visibleProducts = useMemo(() => {
     const q = filterText.trim().toLowerCase();
     if (!q) return productsForBase;
@@ -128,7 +130,9 @@ export default function App() {
   if (error) return <p style={{ padding: 16, color: "#b00" }}>Error: {error}</p>;
   if (!category) return <p style={{ padding: 16 }}>No active base products found.</p>;
 
-  const descText = base ? (descriptions[base.code] || "") : "";
+  // --- Use Shopify description (tidied) if available ---
+  const rawDesc = base ? (descriptions[base.code] || "") : "";
+  const descText = tidy(rawDesc);
 
   return (
     <div
@@ -143,6 +147,8 @@ export default function App() {
       <p style={{ marginTop: 8, color: "#555" }}>
         Pick a garment type, choose a base, toggle special features, then copy.
       </p>
+
+      <LastUpdated />
 
       {/* Type of garment chips */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
@@ -216,7 +222,8 @@ export default function App() {
                   cursor: "pointer",
                 }}
               >
-                {b.label} — ${b.retail_price.toFixed(2)}
+                {b.label}
+                {` — $${b.retail_price.toFixed(2)}`}
               </button>
             );
           })}
@@ -228,17 +235,17 @@ export default function App() {
         <h2 style={{ marginBottom: 8 }}>Copy block (read-only)</h2>
         <div
           style={{
-            whiteSpace: "pre-wrap",
+            whiteSpace: "pre-line", // was "pre-wrap"; pre-line makes spacing feel tighter
             padding: 12,
             borderRadius: 12,
             border: "1px solid #e5e5e5",
             background: "#fafafa",
             fontSize: 14,
-            lineHeight: 1.4,
+            lineHeight: 1.45,
           }}
         >
           {base
-            ? buildCopyBlock(base, features, descText)
+            ? buildCopyBlock(base, features, descText || buildDescription(base))
             : "Select a base above to preview."}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
@@ -250,7 +257,9 @@ export default function App() {
             Copy description
           </button>
           <button
-            onClick={() => base && copyToClipboard(buildCopyBlock(base, features, descText))}
+            onClick={() =>
+              base && copyToClipboard(buildCopyBlock(base, features, descText || buildDescription(base)))
+            }
             style={secondaryBtn}
             disabled={!base}
           >
@@ -259,7 +268,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Image grid */}
+      {/* Image grid controls */}
       <div style={{ marginTop: 24 }}>
         <h2 style={{ marginBottom: 8 }}>Current inventory (selected base)</h2>
 
@@ -276,11 +285,16 @@ export default function App() {
             }}
           />
           {filterText && (
-            <button onClick={() => setFilterText("")} style={{ ...secondaryBtn, padding: "6px 10px" }}>
+            <button
+              onClick={() => setFilterText("")}
+              style={{ ...secondaryBtn, padding: "6px 10px" }}
+            >
               Clear
             </button>
           )}
-          <span style={{ color: "#666", fontSize: 12 }}>{visibleProducts.length} matching</span>
+          <span style={{ color: "#666", fontSize: 12 }}>
+            {visibleProducts.length} matching
+          </span>
         </div>
 
         {visibleProducts.length === 0 ? (
@@ -382,8 +396,12 @@ function legacyCopy(text: string) {
   document.body.removeChild(ta);
 }
 
-/** Prefer Shopify description; otherwise fall back to a template */
-function buildCopyBlock(b: BaseProduct, features: Set<FeatureCode>, descText?: string): string {
+function buildCopyBlock(
+  b: BaseProduct,
+  features: Set<FeatureCode>,
+  body: string
+): string {
+  // Combine base's inherent flags with user-selected features
   const tags = new Set<string>([b.tier]);
   if (b.organic || features.has("organic")) tags.add("organic");
   if (b.usa_made || features.has("usa_made")) tags.add("usa_made");
@@ -396,11 +414,9 @@ function buildCopyBlock(b: BaseProduct, features: Set<FeatureCode>, descText?: s
     `Tier: ${b.tier}\n` +
     `Tags used: ${Array.from(tags).join(", ")}`;
 
-  const body = (descText && descText.trim()) ? descText : buildDescription(b);
   return `${header}\n\n${body}`;
 }
 
-/** Template description used only when no Shopify text is present */
 function buildDescription(b: BaseProduct): string {
   if (b.code === "AS4062") {
     return (
@@ -431,3 +447,4 @@ const secondaryBtn: CSSProperties = {
   color: "#111",
   cursor: "pointer",
 };
+
