@@ -2,8 +2,7 @@ name: Nightly Shopify → CSV
 
 on:
   schedule:
-    # 3:00 UTC daily
-    - cron: "0 3 * * *"
+    - cron: "0 3 * * *"   # 3:00 UTC daily
   workflow_dispatch: {}
 
 permissions:
@@ -53,13 +52,7 @@ jobs:
             process.exit(1);
           }
 
-          // Map tag -> base code. Accept full code OR alias (model-only).
-          // Examples mapped to same base:
-          //   CC1717 <-> 1717
-          //   BC3413 <-> 3413
-          //   AS5001T <-> 5001T
-          //   SS_SATU001 <-> SATU001
-          //   CHM2580 <-> M2580, CHOW1086 <-> OW1086, CHMC1086 <-> MC1086, CHMC1087 <-> MC1087
+          // Map tag/alias -> base code
           const aliasToBase = new Map();
           for (const code of baseCodes) {
             const U = code.toUpperCase();
@@ -69,13 +62,13 @@ jobs:
             const afterUnderscore = U.split("_").pop();
             if (afterUnderscore && afterUnderscore !== U) aliasToBase.set(afterUnderscore, code);
 
-            // strip a 2-letter brand prefix (e.g., CHM2580 -> M2580)
+            // strip 2-letter brand prefix (CHOW1086 -> OW1086, CHMC1086 -> MC1086)
             const stripBrand = U.replace(/^[A-Z]{2}_?/, "");
             if (stripBrand && stripBrand !== U) aliasToBase.set(stripBrand, code);
           }
 
           // ---- fetch all products (REST) ----
-          const apiVersion = "2023-10"; // stable
+          const apiVersion = "2023-10";
           async function fetchAllProducts() {
             let url = `https://${SHOP}/admin/api/${apiVersion}/products.json?limit=250&status=active`;
             const out = [];
@@ -131,11 +124,29 @@ jobs:
             return product?.image?.src || "";
           }
 
+          // Convert Shopify HTML to text with bullets/newlines preserved
+          function htmlToText(html) {
+            return (html || "")
+              .replace(/<\s*br\s*\/?>/gi, '\n')
+              .replace(/<\/p>/gi, '\n\n')
+              .replace(/<li[^>]*>/gi, '- ')
+              .replace(/<\/li>/gi, '\n')
+              .replace(/<[^>]+>/g, '')
+              .replace(/&nbsp;/g, ' ')
+              .replace(/&amp;/g, '&')
+              .replace(/&#39;/g, "'")
+              .replace(/&quot;/g, '"')
+              .trim();
+          }
+
           (async () => {
             const products = await fetchAllProducts();
 
             const rows = [];
             rows.push(["sku","base_code","title","color","size","image_src","enabled"]);
+
+            // Collect one description per base_code (choose the longest non-empty)
+            const descByBase = {};
 
             for (const p of products) {
               const tagSet = normalizeTagSet(p.tags);
@@ -147,6 +158,13 @@ jobs:
                 if (hit) { baseCode = hit; break; }
               }
               if (!baseCode) continue; // no base -> skip
+
+              // capture description for this base (prefer the longest)
+              const textDesc = htmlToText(p.body_html || "");
+              if (textDesc) {
+                const cur = descByBase[baseCode] || "";
+                if (textDesc.length > cur.length) descByBase[baseCode] = textDesc;
+              }
 
               for (const v of (p.variants || [])) {
                 const sku = (v.sku || `${p.handle}-${v.id}`).toString();
@@ -160,11 +178,24 @@ jobs:
 
             const outDir = path.join(process.cwd(), "public", "data");
             fs.mkdirSync(outDir, { recursive: true });
+
             const csv = rows.map(r => r.map(s => String(s ?? "").replace(/"/g,'""'))
                                      .map(s => /[",\n]/.test(s) ? `"${s}"` : s).join(",")).join("\n");
             fs.writeFileSync(path.join(outDir, "products.csv"), csv, "utf8");
-            fs.writeFileSync(path.join(outDir, "meta.json"), JSON.stringify({ last_updated: new Date().toISOString() }), "utf8");
-            console.log("Wrote products.csv and meta.json");
+
+            fs.writeFileSync(
+              path.join(outDir, "descriptions.json"),
+              JSON.stringify(descByBase, null, 2),
+              "utf8"
+            );
+
+            fs.writeFileSync(
+              path.join(outDir, "meta.json"),
+              JSON.stringify({ last_updated: new Date().toISOString() }),
+              "utf8"
+            );
+
+            console.log("Wrote products.csv, descriptions.json, meta.json");
           })().catch(e => {
             console.error(e);
             process.exit(1);
@@ -176,8 +207,8 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if [[ -n $(git status --porcelain public/data) ]]; then
-            git add public/data/products.csv public/data/meta.json
-            git commit -m "chore(data): nightly Shopify sweep → products.csv"
+            git add public/data/products.csv public/data/descriptions.json public/data/meta.json
+            git commit -m "chore(data): nightly Shopify sweep → products.csv + descriptions.json"
             git push
           else
             echo "No changes in public/data"
