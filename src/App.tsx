@@ -1,8 +1,9 @@
-import LastUpdated from "./LastUpdated";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import LastUpdated from "./LastUpdated";
 import { loadBaseProducts, type BaseProduct } from "./loadBaseProducts";
 import { loadProducts, type Product } from "./loadProducts";
-import { loadDescriptions } from "./loadDescriptions";
+
+/* ---------- labels ---------- */
 
 // Human labels for the category codes in your CSV
 const CATEGORY_LABEL: Record<string, string> = {
@@ -13,25 +14,51 @@ const CATEGORY_LABEL: Record<string, string> = {
   tank: "Tank",
   crop: "Crop Tee",
 };
+
+// Human labels for tiers shown in the copy block
 const TIER_LABEL: Record<string, string> = {
   std: "Std",
   mid: "Mid",
   premium_non_org: "Premium",
   premium_org: "Premium +",
-  heavy_top: "Mid",         // choose what you prefer for this one
-  alt_mid_triblend: "Mid",  // fallback label
+  heavy_top: "Mid",        // pick what you prefer for this
+  alt_mid_triblend: "Mid", // fallback
 };
 
 type FeatureCode = "organic" | "usa_made" | "triblend";
 
-// --- NEW: normalizes description spacing ---
-function tidy(text: string): string {
-  return text
-    .replace(/\r\n/g, "\n")     // normalize Windows line endings
-    .replace(/\n{3,}/g, "\n\n") // collapse 3+ newlines → just 2
-    .replace(/[ \t]+\n/g, "\n") // trim trailing spaces before newline
-    .trim();
+/* ---------- helpers (formatting, clipboard) ---------- */
+
+// Normalizes Shopify/HTML-ish descriptions into tidy paragraphs
+function normalizeDescription(raw?: string): string {
+  if (!raw) return "";
+  let s = raw
+    .replace(/\r\n/g, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>\s*<p>/gi, "\n\n")
+    .replace(/<\/?[^>]+>/g, "");
+  s = s.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  return s;
 }
+
+function copyToClipboard(text: string) {
+  if (!text) return;
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => legacyCopy(text));
+  } else {
+    legacyCopy(text);
+  }
+}
+function legacyCopy(text: string) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  document.body.removeChild(ta);
+}
+
+/* ---------- app ---------- */
 
 export default function App() {
   const [bases, setBases] = useState<BaseProduct[]>([]);
@@ -43,23 +70,31 @@ export default function App() {
   const [category, setCategory] = useState<string | null>(null);
   const [selectedBase, setSelectedBase] = useState<string | null>(null);
   const [features, setFeatures] = useState<Set<FeatureCode>>(new Set());
-
-  // simple filter query for the grid
   const [filterText, setFilterText] = useState("");
 
-  // Load CSVs + descriptions once
+  // load data once
   useEffect(() => {
     (async () => {
       try {
-        const [bp, pr, desc] = await Promise.all([
+        const [bp, pr] = await Promise.all([
           loadBaseProducts(),
           loadProducts(),
-          loadDescriptions(),
         ]);
         const activeBases = bp.filter((r) => r.active);
         setBases(activeBases);
         setProducts(pr.filter((p) => p.enabled));
-        setDescriptions(desc || {});
+
+        // try to fetch base descriptions (from workflow output)
+        try {
+          const res = await fetch("/data/descriptions.json", { cache: "no-store" });
+          if (res.ok) {
+            const json = (await res.json()) as Record<string, string>;
+            setDescriptions(json || {});
+          }
+        } catch {
+          // non-fatal
+        }
+
         setCategory(activeBases[0]?.category ?? null);
       } catch (e: any) {
         setError(e?.message ?? String(e));
@@ -69,26 +104,26 @@ export default function App() {
     })();
   }, []);
 
-  // Category chips
+  // categories present
   const categories = useMemo(() => {
     const set = new Set<string>();
     bases.forEach((r) => set.add(r.category));
     return Array.from(set);
   }, [bases]);
 
-  // Bases for selected category
+  // bases for selected category
   const basesForCategory = useMemo(
     () => bases.filter((r) => r.category === category),
     [bases, category]
   );
 
-  // Keep a valid base selected when category changes
+  // ensure a selected base when category changes
   useEffect(() => {
     if (!category) return;
     const first = bases.find((r) => r.category === category);
     if (first) setSelectedBase(first.code);
-    setFeatures(new Set()); // reset feature toggles when switching type
-    setFilterText(""); // also clear the grid filter
+    setFeatures(new Set());
+    setFilterText("");
   }, [category, bases]);
 
   const base = useMemo(
@@ -96,7 +131,7 @@ export default function App() {
     [bases, selectedBase]
   );
 
-  // Feature availability (drives chip disabled state)
+  // feature availability (enables/disables chips)
   const canOrganic = basesForCategory.some((b) => b.organic);
   const canUSAMade = basesForCategory.some((b) => b.usa_made);
   const canTriblend =
@@ -105,7 +140,7 @@ export default function App() {
       (b) =>
         /triblend/i.test(b.label) ||
         /tri[- ]?blend/i.test(b.fit_notes ?? "") ||
-        (b.tier as any) === "alt_mid_triblend"
+        b.tier === ("alt_mid_triblend" as any)
     );
 
   function toggleFeature(code: FeatureCode, enabled: boolean) {
@@ -117,13 +152,13 @@ export default function App() {
     });
   }
 
-  // Products filtered by selected base
+  // products for the selected base
   const productsForBase = useMemo(
     () => products.filter((p) => p.base_code === selectedBase && p.enabled),
     [products, selectedBase]
   );
 
-  // text filter applied to the base’s products
+  // filter grid products
   const visibleProducts = useMemo(() => {
     const q = filterText.trim().toLowerCase();
     if (!q) return productsForBase;
@@ -137,10 +172,6 @@ export default function App() {
   if (loading) return <p style={{ padding: 16 }}>Loading…</p>;
   if (error) return <p style={{ padding: 16, color: "#b00" }}>Error: {error}</p>;
   if (!category) return <p style={{ padding: 16 }}>No active base products found.</p>;
-
-  // --- Use Shopify description (tidied) if available ---
-  const rawDesc = base ? (descriptions[base.code] || "") : "";
-  const descText = tidy(rawDesc);
 
   return (
     <div
@@ -230,8 +261,7 @@ export default function App() {
                   cursor: "pointer",
                 }}
               >
-                {b.label}
-                {` — $${b.retail_price.toFixed(2)}`}
+                {b.label} {` — $${b.retail_price.toFixed(2)}`}
               </button>
             );
           })}
@@ -243,31 +273,27 @@ export default function App() {
         <h2 style={{ marginBottom: 8 }}>Copy block (read-only)</h2>
         <div
           style={{
-            whiteSpace: "pre-line", // was "pre-wrap"; pre-line makes spacing feel tighter
+            whiteSpace: "pre-wrap",
             padding: 12,
             borderRadius: 12,
             border: "1px solid #e5e5e5",
             background: "#fafafa",
             fontSize: 14,
-            lineHeight: 1.45,
+            lineHeight: 1.4,
           }}
         >
-          {base
-            ? buildCopyBlock(base, features, descText || buildDescription(base))
-            : "Select a base above to preview."}
+          {base ? buildCopyBlock(base, features, descriptions) : "Select a base above to preview."}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <button
-            onClick={() => base && copyToClipboard(descText || buildDescription(base))}
+            onClick={() => base && copyToClipboard(buildDescription(base, descriptions))}
             style={primaryBtn}
             disabled={!base}
           >
             Copy description
           </button>
           <button
-            onClick={() =>
-              base && copyToClipboard(buildCopyBlock(base, features, descText || buildDescription(base)))
-            }
+            onClick={() => base && copyToClipboard(buildCopyBlock(base, features, descriptions))}
             style={secondaryBtn}
             disabled={!base}
           >
@@ -293,16 +319,11 @@ export default function App() {
             }}
           />
           {filterText && (
-            <button
-              onClick={() => setFilterText("")}
-              style={{ ...secondaryBtn, padding: "6px 10px" }}
-            >
+            <button onClick={() => setFilterText("")} style={{ ...secondaryBtn, padding: "6px 10px" }}>
               Clear
             </button>
           )}
-          <span style={{ color: "#666", fontSize: 12 }}>
-            {visibleProducts.length} matching
-          </span>
+          <span style={{ color: "#666", fontSize: 12 }}>{visibleProducts.length} matching</span>
         </div>
 
         {visibleProducts.length === 0 ? (
@@ -356,7 +377,7 @@ export default function App() {
   );
 }
 
-/* ---------- helpers ---------- */
+/* ---------- small UI bits ---------- */
 
 function Chip({
   label,
@@ -387,29 +408,14 @@ function Chip({
   );
 }
 
-function copyToClipboard(text: string) {
-  if (!text) return;
-  if (navigator.clipboard?.writeText) {
-    navigator.clipboard.writeText(text).catch(() => legacyCopy(text));
-  } else {
-    legacyCopy(text);
-  }
-}
-function legacyCopy(text: string) {
-  const ta = document.createElement("textarea");
-  ta.value = text;
-  document.body.appendChild(ta);
-  ta.select();
-  document.execCommand("copy");
-  document.body.removeChild(ta);
-}
+/* ---------- copy-block builders ---------- */
 
 function buildCopyBlock(
   b: BaseProduct,
   features: Set<FeatureCode>,
-  body: string
+  descriptions: Record<string, string>
 ): string {
-  // Combine base's inherent flags with user-selected features
+  // Combine base inherent flags with user toggles
   const tags = new Set<string>([b.tier]);
   if (b.organic || features.has("organic")) tags.add("organic");
   if (b.usa_made || features.has("usa_made")) tags.add("usa_made");
@@ -422,23 +428,33 @@ function buildCopyBlock(
     `Tier: ${TIER_LABEL[b.tier] ?? b.tier}\n` +
     `Tags used: ${Array.from(tags).join(", ")}`;
 
+  const body = buildDescription(b, descriptions);
+
   return `${header}\n\n${body}`;
 }
 
-function buildDescription(b: BaseProduct): string {
+function buildDescription(b: BaseProduct, descriptions: Record<string, string>): string {
+  // Prefer shop description by base code; fall back to quick defaults
+  const shop = normalizeDescription(descriptions[b.code]);
+  if (shop) return shop;
+
+  // targeted fallback for known special base(s)
   if (b.code === "AS4062") {
-    return (
+    return normalizeDescription(
       "A modern cropped tee with a relaxed silhouette that pairs easily with high-waisted bottoms.\n" +
-      "- Midweight combed cotton (heathers may vary)\n" +
-      "- Relaxed fit, cropped length\n" +
-      "- Ribbed crew neck, side-seamed\n" +
-      "- Preshrunk to minimize shrinkage"
+        "- Midweight combed cotton (heathers may vary)\n" +
+        "- Relaxed fit, cropped length\n" +
+        "- Ribbed crew neck, side-seamed\n" +
+        "- Preshrunk to minimize shrinkage"
     );
   }
-  return `- ${b.fit_notes || "Comfortable everyday fit"}\n- Brand: ${b.brand} ${b.model_name}`;
+
+  // generic minimal fallback
+  return normalizeDescription(`- ${b.fit_notes || "Comfortable everyday fit"}\n- Brand: ${b.brand} ${b.model_name}`);
 }
 
-/* button styles */
+/* ---------- button styles ---------- */
+
 const primaryBtn: CSSProperties = {
   padding: "8px 12px",
   borderRadius: 12,
@@ -455,4 +471,3 @@ const secondaryBtn: CSSProperties = {
   color: "#111",
   cursor: "pointer",
 };
-
