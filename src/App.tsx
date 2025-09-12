@@ -25,7 +25,7 @@ export default function App() {
   const [selectedBase, setSelectedBase] = useState<string | null>(null);
   const [features, setFeatures] = useState<Set<FeatureCode>>(new Set());
 
-  // NEW: simple filter query for the grid
+  // simple text filter for the grid
   const [filterText, setFilterText] = useState("");
 
   // Load CSVs once
@@ -99,7 +99,7 @@ export default function App() {
     [products, selectedBase]
   );
 
-  // NEW: text filter applied to the base’s products
+  // Text filter applied to the base’s products
   const visibleProducts = useMemo(() => {
     const q = filterText.trim().toLowerCase();
     if (!q) return productsForBase;
@@ -345,7 +345,7 @@ function Chip({
       style={{
         padding: "8px 12px",
         borderRadius: 999,
-        border: active ? "1px solid #111" : "1px solid "#ddd",
+        border: active ? "1px solid #111" : "1px solid #ddd",
         background: disabled ? "#f3f3f3" : active ? "#111" : "#fff",
         color: disabled ? "#999" : active ? "#fff" : "#111",
         cursor: disabled ? "not-allowed" : "pointer",
@@ -373,8 +373,19 @@ function legacyCopy(text: string) {
   document.body.removeChild(ta);
 }
 
+/** Map brand-tier slugs to display, and add "+" when organic is on */
+function displayTier(b: BaseProduct, features: Set<FeatureCode>): string {
+  const base = (b.tier || "").toLowerCase(); // 'std' | 'mid' | 'premium' | ''
+  const labelMap: Record<string, string> = { std: "Std", mid: "Mid", premium: "Premium" };
+  const label = labelMap[base] ?? "—";
+  const isOrganic = b.organic || features.has("organic");
+  return base === "premium" && isOrganic ? `${label} +` : label;
+}
+
 function buildCopyBlock(b: BaseProduct, features: Set<FeatureCode>): string {
-  // Combine base's inherent flags with user-selected features
+  const tierDisplay = displayTier(b, features);
+
+  // Keep tags for reference (tier slug + organic/usa_made flags)
   const tags = new Set<string>([b.tier]);
   if (b.organic || features.has("organic")) tags.add("organic");
   if (b.usa_made || features.has("usa_made")) tags.add("usa_made");
@@ -384,6 +395,7 @@ function buildCopyBlock(b: BaseProduct, features: Set<FeatureCode>): string {
     `Base Product Name: ${b.label}\n` +
     `Base Product Code: ${b.code}\n` +
     `Retail Price: $${b.retail_price.toFixed(2)}\n` +
+    `Tier: ${tierDisplay}\n` +
     `Tags used: ${Array.from(tags).join(", ")}`;
 
   return `${header}\n\n${buildDescription(b)}`;
