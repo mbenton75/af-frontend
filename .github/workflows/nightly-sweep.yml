@@ -1,0 +1,147 @@
+name: Nightly Shopify → CSV
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 3:00 UTC daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    env:
+      SHOP: ${{ secrets.SHOPIFY_SHOP }}
+      TOKEN: ${{ secrets.SHOPIFY_ADMIN_TOKEN }}
+      NETLIFY_BUILD_HOOK: ${{ secrets.NETLIFY_BUILD_HOOK }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build products.csv from Shopify
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const SHOP = process.env.SHOP;
+          const TOKEN = process.env.TOKEN;
+
+          if (!SHOP || !TOKEN) {
+            console.error("Missing SHOPIFY_SHOP or SHOPIFY_ADMIN_TOKEN.");
+            process.exit(1);
+          }
+
+          // Read base codes from repo (first column = code)
+          const baseCsvPath = path.join(process.cwd(), "public", "data", "base_products.csv");
+          const codeSet = new Set();
+          try {
+            const txt = fs.readFileSync(baseCsvPath, "utf8");
+            const lines = txt.split(/\r?\n/).filter(Boolean);
+            lines.shift(); // header
+            for (const line of lines) {
+              const code = (line.split(",")[0] || "").trim().toUpperCase();
+              if (code) codeSet.add(code);
+            }
+          } catch (e) {
+            console.error("Could not read base_products.csv:", e.message);
+            process.exit(1);
+          }
+
+          // Fetch all products from Shopify (REST)
+          const apiVersion = "2023-10";
+          async function fetchAllProducts() {
+            let url = `https://${SHOP}/admin/api/${apiVersion}/products.json?limit=250&status=active`;
+            const out = [];
+            while (url) {
+              const res = await fetch(url, {
+                headers: { "X-Shopify-Access-Token": TOKEN, "Content-Type": "application/json" },
+              });
+              if (!res.ok) throw new Error(`Shopify ${res.status}: ${await res.text()}`);
+              const data = await res.json();
+              out.push(...(data.products || []));
+              const link = res.headers.get("link") || res.headers.get("Link");
+              if (link && /rel="next"/.test(link)) {
+                const m = link.match(/<([^>]+)>;\s*rel="next"/);
+                url = m ? m[1] : null;
+              } else url = null;
+            }
+            return out;
+          }
+
+          function normalizeTagSet(tags) {
+            return new Set((tags || "").split(",").map(t => t.trim().toUpperCase()).filter(Boolean));
+          }
+
+          function variantColorSize(product, variant) {
+            const names = (product.options || []).map(o => (o.name || "").toLowerCase());
+            const vals = [variant.option1, variant.option2, variant.option3];
+            let color = "", size = "";
+            for (let i = 0; i < names.length; i++) {
+              const n = names[i];
+              const v = (vals[i] || "").toString();
+              if (!n) continue;
+              if (!color && (n.includes("color") || n.includes("colour"))) color = v;
+              if (!size && n.includes("size")) size = v;
+            }
+            if (!color) color = (vals[0] || "").toString();
+            if (!size) size = (vals[1] || "").toString();
+            return { color, size };
+          }
+
+          function variantImage(product, variant) {
+            if (variant.image_id) {
+              const img = (product.images || []).find(i => i.id === variant.image_id);
+              if (img?.src) return img.src;
+            }
+            return product?.image?.src || "";
+          }
+
+          (async () => {
+            const products = await fetchAllProducts();
+
+            const rows = [];
+            rows.push(["sku","base_code","title","color","size","image_src","enabled"]);
+
+            for (const p of products) {
+              const tagSet = normalizeTagSet(p.tags);
+              // match any tag to a known base code
+              const baseCode = [...tagSet].find(t => codeSet.has(t)) || "";
+              if (!baseCode) continue;
+
+              for (const v of (p.variants || [])) {
+                const sku = (v.sku || `${p.handle}-${v.id}`).toString();
+                const { color, size } = variantColorSize(p, v);
+                const img = variantImage(p, v);
+                const enabled = p.status === "active" ? "true" : "false";
+                const title = `${p.title} — ${v.title || [color, size].filter(Boolean).join(" ")}`.trim();
+                rows.push([sku, baseCode, title, color, size, img, enabled]);
+              }
+            }
+
+            const outDir = path.join(process.cwd(), "public", "data");
+            fs.mkdirSync(outDir, { recursive: true });
+            const csv = rows.map(r => r.map(s => String(s ?? "").replace(/"/g,'""'))
+                                     .map(s => /[",\n]/.test(s) ? `"${s}"` : s).join(",")).join("\n");
+            fs.writeFileSync(path.join(outDir, "products.csv"), csv, "utf8");
+            fs.writeFileSync(path.join(outDir, "meta.json"), JSON.stringify({ last_updated: new Date().toISOString() }), "utf8");
+            console.log("Wrote products.csv and meta.json");
+          })().catch(e => { console.error(e); process.exit(1); });
+          NODE
+
+      - name: Commit CSVs (if changed)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data/products.csv public/data/meta.json || true
+          git commit -m "chore(data): nightly Shopify sweep → products.csv" || echo "No changes to commit"
+          git push
+
+      - name: Trigger Netlify build
+        run: |
+          if [ -n "${NETLIFY_BUILD_HOOK}" ]; then
+            curl -s -X POST "${NETLIFY_BUILD_HOOK}" || true
+          fi
