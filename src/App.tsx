@@ -1,3 +1,4 @@
+import LastUpdated from "./LastUpdated";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { loadBaseProducts, type BaseProduct } from "./loadBaseProducts";
 import { loadProducts, type Product } from "./loadProducts";
