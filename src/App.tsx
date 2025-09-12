@@ -123,6 +123,9 @@ export default function App() {
         margin: "0 auto",
       }}
     >
+      {/* last-updated badge */}
+      <LastUpdated />
+
       <h1 style={{ margin: 0, fontSize: 28 }}>ArtsyFartsy — Product Uniformity</h1>
       <p style={{ marginTop: 8, color: "#555" }}>
         Pick a garment type, choose a base, toggle special features, then copy.
@@ -216,7 +219,7 @@ export default function App() {
             whiteSpace: "pre-wrap",
             padding: 12,
             borderRadius: 12,
-            border: "1px solid #e5e5e5",
+            border: "1px solid " + "#e5e5e5",
             background: "#fafafa",
             fontSize: 14,
             lineHeight: 1.4,
@@ -342,7 +345,7 @@ function Chip({
       style={{
         padding: "8px 12px",
         borderRadius: 999,
-        border: active ? "1px solid #111" : "1px solid #ddd",
+        border: active ? "1px solid #111" : "1px solid "#ddd",
         background: disabled ? "#f3f3f3" : active ? "#111" : "#fff",
         color: disabled ? "#999" : active ? "#fff" : "#111",
         cursor: disabled ? "not-allowed" : "pointer",
