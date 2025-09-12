@@ -1,9 +1,8 @@
-import LastUpdated from "./LastUpdated";
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { loadBaseProducts, type BaseProduct } from "./loadBaseProducts";
 import { loadProducts, type Product } from "./loadProducts";
 
-// Human labels for the category codes in your CSV
+/** Friendly labels for your categories */
 const CATEGORY_LABEL: Record<string, string> = {
   short_tee: "Short Sleeve",
   long_tee: "Long Sleeve",
@@ -15,27 +14,42 @@ const CATEGORY_LABEL: Record<string, string> = {
 
 type FeatureCode = "organic" | "usa_made" | "triblend";
 
+/** Best-effort fetch of /data/descriptions.json (safe if missing) */
+async function loadDescriptions(): Promise<Record<string, string>> {
+  try {
+    const res = await fetch("/data/descriptions.json", { cache: "no-store" });
+    if (!res.ok) return {};
+    return (await res.json()) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
 export default function App() {
   const [bases, setBases] = useState<BaseProduct[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [descriptions, setDescriptions] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [category, setCategory] = useState<string | null>(null);
   const [selectedBase, setSelectedBase] = useState<string | null>(null);
   const [features, setFeatures] = useState<Set<FeatureCode>>(new Set());
-
-  // simple text filter for the grid
   const [filterText, setFilterText] = useState("");
 
-  // Load CSVs once
+  // Load CSVs + descriptions once
   useEffect(() => {
     (async () => {
       try {
-        const [bp, pr] = await Promise.all([loadBaseProducts(), loadProducts()]);
+        const [bp, pr, desc] = await Promise.all([
+          loadBaseProducts(),
+          loadProducts(),
+          loadDescriptions(),
+        ]);
         const activeBases = bp.filter((r) => r.active);
         setBases(activeBases);
         setProducts(pr.filter((p) => p.enabled));
+        setDescriptions(desc || {});
         setCategory(activeBases[0]?.category ?? null);
       } catch (e: any) {
         setError(e?.message ?? String(e));
@@ -81,8 +95,8 @@ export default function App() {
       (b) =>
         /triblend/i.test(b.label) ||
         /tri[- ]?blend/i.test(b.fit_notes ?? "") ||
-        b.tier === ("alt_mid_triblend" as any)
-    ); // none yet → disabled until you add one
+        (b as any).tier === "alt_mid_triblend"
+    );
 
   function toggleFeature(code: FeatureCode, enabled: boolean) {
     setFeatures((prev) => {
@@ -99,7 +113,7 @@ export default function App() {
     [products, selectedBase]
   );
 
-  // Text filter applied to the base’s products
+  // Text filter on the grid
   const visibleProducts = useMemo(() => {
     const q = filterText.trim().toLowerCase();
     if (!q) return productsForBase;
@@ -114,6 +128,8 @@ export default function App() {
   if (error) return <p style={{ padding: 16, color: "#b00" }}>Error: {error}</p>;
   if (!category) return <p style={{ padding: 16 }}>No active base products found.</p>;
 
+  const descText = base ? (descriptions[base.code] || "") : "";
+
   return (
     <div
       style={{
@@ -123,9 +139,6 @@ export default function App() {
         margin: "0 auto",
       }}
     >
-      {/* last-updated badge */}
-      <LastUpdated />
-
       <h1 style={{ margin: 0, fontSize: 28 }}>ArtsyFartsy — Product Uniformity</h1>
       <p style={{ marginTop: 8, color: "#555" }}>
         Pick a garment type, choose a base, toggle special features, then copy.
@@ -203,8 +216,7 @@ export default function App() {
                   cursor: "pointer",
                 }}
               >
-                {b.label}
-                {` — $${b.retail_price.toFixed(2)}`}
+                {b.label} — ${b.retail_price.toFixed(2)}
               </button>
             );
           })}
@@ -219,24 +231,26 @@ export default function App() {
             whiteSpace: "pre-wrap",
             padding: 12,
             borderRadius: 12,
-            border: "1px solid " + "#e5e5e5",
+            border: "1px solid #e5e5e5",
             background: "#fafafa",
             fontSize: 14,
             lineHeight: 1.4,
           }}
         >
-          {base ? buildCopyBlock(base, features) : "Select a base above to preview."}
+          {base
+            ? buildCopyBlock(base, features, descText)
+            : "Select a base above to preview."}
         </div>
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
           <button
-            onClick={() => base && copyToClipboard(buildDescription(base))}
+            onClick={() => base && copyToClipboard(descText || buildDescription(base))}
             style={primaryBtn}
             disabled={!base}
           >
             Copy description
           </button>
           <button
-            onClick={() => base && copyToClipboard(buildCopyBlock(base, features))}
+            onClick={() => base && copyToClipboard(buildCopyBlock(base, features, descText))}
             style={secondaryBtn}
             disabled={!base}
           >
@@ -245,7 +259,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Image grid controls */}
+      {/* Image grid */}
       <div style={{ marginTop: 24 }}>
         <h2 style={{ marginBottom: 8 }}>Current inventory (selected base)</h2>
 
@@ -262,16 +276,11 @@ export default function App() {
             }}
           />
           {filterText && (
-            <button
-              onClick={() => setFilterText("")}
-              style={{ ...secondaryBtn, padding: "6px 10px" }}
-            >
+            <button onClick={() => setFilterText("")} style={{ ...secondaryBtn, padding: "6px 10px" }}>
               Clear
             </button>
           )}
-          <span style={{ color: "#666", fontSize: 12 }}>
-            {visibleProducts.length} matching
-          </span>
+          <span style={{ color: "#666", fontSize: 12 }}>{visibleProducts.length} matching</span>
         </div>
 
         {visibleProducts.length === 0 ? (
@@ -373,19 +382,8 @@ function legacyCopy(text: string) {
   document.body.removeChild(ta);
 }
 
-/** Map brand-tier slugs to display, and add "+" when organic is on */
-function displayTier(b: BaseProduct, features: Set<FeatureCode>): string {
-  const base = (b.tier || "").toLowerCase(); // 'std' | 'mid' | 'premium' | ''
-  const labelMap: Record<string, string> = { std: "Std", mid: "Mid", premium: "Premium" };
-  const label = labelMap[base] ?? "—";
-  const isOrganic = b.organic || features.has("organic");
-  return base === "premium" && isOrganic ? `${label} +` : label;
-}
-
-function buildCopyBlock(b: BaseProduct, features: Set<FeatureCode>): string {
-  const tierDisplay = displayTier(b, features);
-
-  // Keep tags for reference (tier slug + organic/usa_made flags)
+/** Prefer Shopify description; otherwise fall back to a template */
+function buildCopyBlock(b: BaseProduct, features: Set<FeatureCode>, descText?: string): string {
   const tags = new Set<string>([b.tier]);
   if (b.organic || features.has("organic")) tags.add("organic");
   if (b.usa_made || features.has("usa_made")) tags.add("usa_made");
@@ -395,12 +393,14 @@ function buildCopyBlock(b: BaseProduct, features: Set<FeatureCode>): string {
     `Base Product Name: ${b.label}\n` +
     `Base Product Code: ${b.code}\n` +
     `Retail Price: $${b.retail_price.toFixed(2)}\n` +
-    `Tier: ${tierDisplay}\n` +
+    `Tier: ${b.tier}\n` +
     `Tags used: ${Array.from(tags).join(", ")}`;
 
-  return `${header}\n\n${buildDescription(b)}`;
+  const body = (descText && descText.trim()) ? descText : buildDescription(b);
+  return `${header}\n\n${body}`;
 }
 
+/** Template description used only when no Shopify text is present */
 function buildDescription(b: BaseProduct): string {
   if (b.code === "AS4062") {
     return (
