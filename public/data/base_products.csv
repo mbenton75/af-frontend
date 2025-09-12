@@ -1,6 +1,6 @@
 code,brand,model_name,label,category,tier,organic,usa_made,active,retail_price,fit_notes
 AS5001T,AS Colour,5001T,AS Colour 5001T,short_tee,premium_non_org,false,false,true,42.50,Premium midweight true to size
-SS_STTU169,Stanley/Stella,STTU169,Stanley/Stella STTU169 (Organic),short_tee,premium_org,true,false,true,42.50,Organic cotton regular fit
+SS_SATU001,Stanley/Stella,SATU001,Stanley/Stella SATU001 Unisex Classic Tee (Organic),short_tee,,true,false,true,42.50,Organic cotton regular fit
 BC3501,Bella + Canvas,3501,B+C 3501 LS,long_tee,mid,false,false,true,36.50,Light-mid LS modern fit
 AS5081,AS Colour,5081,AS Colour 5081 Heavy LS,long_tee,heavy_top,false,false,true,42.50,Heavyweight structured drape
 CC6014,Comfort Colors,6014,Comfort Colors 6014 Heavy LS,long_tee,heavy_top,false,false,true,42.50,Garment-dyed heavy relaxed fit
